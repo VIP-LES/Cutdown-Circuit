@@ -29,6 +29,7 @@ void setup() {
 	// The cutdown pin need to be configured first to let it act as a power
 	// source.
 	pinMode(CUTDOWN_PIN, OUTPUT);
+	Particle.function("cutcirc2", activate_cutdown);
 }
 
 
