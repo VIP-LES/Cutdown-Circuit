@@ -1,48 +1,86 @@
-/*
-Get some initial cutdown circuit stuff working in here.
-The cutdown circuit requires a HIGH and a LOW to work, I imagine.
-Need to clarify this thing with the cutdown team, and hopefully test it out
-once on the Particle board.
+//this is all we need to grab the data from the serial port and put it through the publisher
+String content = "";
+char character;
 
-
-The documentation for the pin stuff can be found here:
-
-https://docs.particle.io/reference/device-os/firmware/photon
-Device OS API > Input/Output > pinMode()
-Device OS API > Low Level Input/Output > pinSetFast(), pinResetFast()
-*/
-
-
-// WARNING
-// Pin 12 is the pin that was being used from Adam's cutdown code, found
-// here:
-// https://github.com/VIP-LES/Cutdown-Circuit/blob/master/test-cutdown-timer.ino
-// Ensure that this pin isn't being used by other devices, because if you don't,
-// that device may get fried.
-int CUTDOWN_PIN = 12;
 
 // Takes 8 seconds to ensure cutdown?
 int CUTDOWN_TIME_MILLIS = 8000;
+Timer ctimer(8000, deactivate_circ);
 
+// alternate timer cutdown:
+// https://docs.particle.io/reference/device-os/firmware/photon/#start-
+int periodicity = 60000; // call every 60,000ms = 60s = 1 min
+Timer timer(periodicity, time_to_cutdown);
+int CUTDOWN_MINS_LIMIT = 180; // cutdown after 180 mins = 3 hrs
 
 void setup() {
-	// The cutdown pin need to be configured first to let it act as a power
-	// source.
-	pinMode(CUTDOWN_PIN, OUTPUT);
-	Particle.function("cutcirc2", activate_cutdown);
+  Serial.begin(9600);   //this is the usb port at 9600
+  
+  
+  // The cutdown pin need to be configured first to let it act as a power source.
+  pinMode(B0, OUTPUT);
+  pinMode(B1, OUTPUT);
+  Particle.function("cutcirc2", activate_cutdown);
+  
+  timer.start();
 }
-
 
 void loop() {
 
 }
 
+
+void time_to_cutdown() {
+    static int hit_cutdown = 0;
+    static int plus = 1;
+    
+    hit_cutdown += plus;
+    
+    if (hit_cutdown >= CUTDOWN_MINS_LIMIT) {
+        hit_cutdown = 0;
+        plus = 0;
+        activate_cutdown(NULL);
+    }
+}
+
+
+void serialEvent()  //built in callback from serial
+{
+  while (Serial.available()) {
+      character = Serial.read();//reads character by character
+      content.concat(character);//dumps into a string that'll deal with the variable size on the backend
+  }
+  Particle.publish("data", content, PRIVATE); //We are publishing all in one topic to save a few bytes
+  content = "";
+}
+
+
+// curl https://api.par373037383634/cutcirc2 -d access_token=b38d047a9da4e6b5e60f8a6f62814bdb0ee8267a
+
 // This is a cheap cutdown circuit method, since it simply activates, waits, and
 // deactivates. I think there is an issue here: this can't be triggered through
 // an nterrupt, since the delay function blocks (I think it blocks).
-void activate_cutdown() {
+int activate_cutdown(const char* msg) {
 	// Set the cutdown pin to HIGH for some time, and then set it to low again.
-	pinSetFast(CUTDOWN_PIN);
+	pinSetFast(B0);
+	pinSetFast(B1);
 	delay(CUTDOWN_TIME_MILLIS);
-	pinResetFast(CUTDOWN_PIN);
+	pinResetFast(B0);
+	pinResetFast(B1);
+	return 13;
+}
+
+
+// an alternate cutdown circuit approach, will test later. For now, the above works.
+int activate_cutdown2(const char* msg) {
+    pinSetFast(B0);
+    pinSetFast(B1);
+    ctimer.reset(); // starts if stopped
+    return 11;
+}
+
+void deactivate_circ() {
+    pinResetFast(B0);
+    pinResetFast(B1);
+    ctimer.stop();
 }
